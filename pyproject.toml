@@ -5,11 +5,17 @@ description = ""
 authors = [
     {name = "uri",email = "oriol@qoroquantum.net"}
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
+    "numpy (>=2.4.4,<3.0.0)",
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "deltakit (>=0.8.0,<0.9.0)",
+    "qoro-maestro (>=0.2.8,<0.3.0)"
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+package-mode = false
