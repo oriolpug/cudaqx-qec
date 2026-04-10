@@ -42,7 +42,7 @@ from deltakit.decode import PyMatchingDecoder
 from deltakit.decode.analysis import run_decoding_on_circuit
 from deltakit.explorer.analysis import calculate_lep_and_lep_stddev
 
-from cudaqx_decoder_bridge import CUDAQXDecoder, PyMatchingBaseline, CUDAQX_AVAILABLE
+from cudaqx_decoder_bridge import CUDAQXDecoder, PyMatchingBaseline, CUDAQX_AVAILABLE, DEFAULT_DECODER, GPU_AVAILABLE
 
 # ── Parameters ──
 d = 3                                     # Code distance
@@ -51,7 +51,7 @@ noise_strengths = [0.002, 0.005, 0.01, 0.02, 0.04]
 stim_shots = 10_000                        # Stim baseline shots
 mps_shots = 500                            # Maestro MPS shots
 chi = 32                                   # Bond dimension
-DECODER_TYPE = 'nv_qldpc_decoder'          # CUDA-QX GPU decoder
+DECODER_TYPE = DEFAULT_DECODER              # nv-qldpc-decoder (GPU) or single_error_lut (CPU)
 
 print("=" * 70)
 print("  GPU-Everywhere QEC: Maestro (cuQuantum) + CUDA-QX Decoding")
@@ -61,6 +61,7 @@ print(f"  Noise model:      SI1000 (superconducting)")
 print(f"  Coherent scale:   ε = {SCALE} × 2√p")
 print(f"  MPS bond dim:     χ={chi}")
 print(f"  MPS shots:        {mps_shots}")
+print(f"  NVIDIA GPU:        {GPU_AVAILABLE}")
 print(f"  CUDA-QX decoder:  {DECODER_TYPE}")
 print(f"  CUDA-QX available: {CUDAQX_AVAILABLE}")
 
@@ -133,7 +134,7 @@ with open(outfile, "w") as f:
         pm_decode_times.append(pm_dt)
         print(f"  → PyMatching (CPU): LEP={pm_lep:.5f}  decode={pm_dt*1000:.1f}ms", flush=True)
 
-        # ─── 2b. Decode with CUDA-QX (GPU) ───
+        # ─── 2b. Decode with CUDA-QX ───
         if CUDAQX_AVAILABLE:
             try:
                 cqx_decoder = CUDAQXDecoder(stim_circ, decoder_type=DECODER_TYPE)
@@ -142,7 +143,8 @@ with open(outfile, "w") as f:
                 cudaqx_coh_stds.append(cqx_std)
                 cudaqx_decode_times.append(cqx_dt)
                 speedup = pm_dt / cqx_dt if cqx_dt > 0 else float('inf')
-                print(f"  → CUDA-QX (GPU):   LEP={cqx_lep:.5f}  decode={cqx_dt*1000:.1f}ms  "
+                cqx_label = "GPU" if GPU_AVAILABLE else "CPU"
+                print(f"  → CUDA-QX ({cqx_label}):   LEP={cqx_lep:.5f}  decode={cqx_dt*1000:.1f}ms  "
                       f"({speedup:.1f}× faster)", flush=True)
             except Exception as e:
                 print(f"  → CUDA-QX error: {e}", flush=True)
@@ -216,7 +218,7 @@ bars1 = ax2.bar(x - width/2, pm_times_ms, width, color='#dc2626', alpha=0.8,
                 label='PyMatching (CPU)', edgecolor='white', linewidth=0.5)
 if any(t > 0 for t in cqx_times_ms):
     bars2 = ax2.bar(x + width/2, cqx_times_ms, width, color='#16a34a', alpha=0.8,
-                    label=f'CUDA-QX (GPU)', edgecolor='white', linewidth=0.5)
+                    label=f'CUDA-QX ({"GPU" if GPU_AVAILABLE else "CPU"})', edgecolor='white', linewidth=0.5)
 
 ax2.set_xlabel('Physical Error Rate (p)', fontsize=13, fontweight='bold')
 ax2.set_ylabel('Decode Time (ms)', fontsize=13, fontweight='bold')
@@ -238,7 +240,7 @@ print(f"\n✓ Plot: {outpng}", flush=True)
 print(f"\n{'=' * 85}")
 print(f"  GPU-Everywhere QEC Pipeline Results")
 print(f"  Simulation: Maestro MPS (cuQuantum/cuTensorNet) — coherent noise")
-print(f"  Decoding:   CUDA-QX {DECODER_TYPE} (GPU) vs PyMatching (CPU)")
+print(f"  Decoding:   CUDA-QX {DECODER_TYPE} ({'GPU' if GPU_AVAILABLE else 'CPU'}) vs PyMatching (CPU)")
 print(f"{'=' * 85}")
 print(f"  {'p':>6}  {'Stim+PM':>10}  {'MPS+PM':>10}  {'MPS+CQX':>10}  "
       f"{'PM(ms)':>8}  {'CQX(ms)':>8}  {'Speedup':>8}")
@@ -253,6 +255,6 @@ for i, p in enumerate(noise_strengths):
 print(f"{'=' * 85}")
 print(f"\n  Key finding: Coherent noise (simulated on GPU via cuQuantum)")
 print(f"  produces higher logical error rates than Pauli noise.")
-print(f"  CUDA-QX GPU decoders decode the syndromes {'' if not CUDAQX_AVAILABLE else 'on GPU, '}faster")
+print(f"  CUDA-QX decoders decode the syndromes {'on GPU, ' if GPU_AVAILABLE else ''}faster")
 print(f"  than CPU-only PyMatching — enabling end-to-end GPU QEC research.")
 print(f"\n{'=' * 85}")

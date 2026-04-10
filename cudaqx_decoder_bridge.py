@@ -18,7 +18,7 @@ Usage:
     from cudaqx_decoder_bridge import CUDAQXDecoder
 
     # Initialize with Stim circuit (for detector error model)
-    decoder = CUDAQXDecoder(stim_circuit, decoder_type='nv_qldpc_decoder')
+    decoder = CUDAQXDecoder(stim_circuit)  # auto-selects GPU or CPU decoder
 
     # Decode Maestro's raw measurements
     lep, lep_std, decode_time = decoder.decode_raw_measurements(raw_measurements)
@@ -30,12 +30,33 @@ Requirements:
 import time
 import numpy as np
 
+import shutil
+import subprocess
+
 try:
     import cudaq_qec as qec
     CUDAQX_AVAILABLE = True
 except ImportError as e:
     CUDAQX_AVAILABLE = False
     print(f"Error importing CUDA QX Error Correction: {e}")
+
+
+def has_gpu():
+    """Return True if an NVIDIA GPU is available."""
+    if not shutil.which("nvidia-smi"):
+        return False
+    try:
+        subprocess.run(
+            ["nvidia-smi"], stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, check=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+GPU_AVAILABLE = has_gpu()
+DEFAULT_DECODER = "nv-qldpc-decoder" if GPU_AVAILABLE else "single_error_lut"
 
 def check_cudaqx():
     """Check if CUDA-QX is available and raise informative error if not."""
@@ -57,17 +78,19 @@ class CUDAQXDecoder:
     decode raw measurement arrays from Maestro simulations.
 
     Supported decoders:
-        - 'nv_qldpc_decoder': NVIDIA QLDPC BP-OSD decoder (29-35× GPU speedup)
+        - 'nv-qldpc-decoder': NVIDIA QLDPC BP-OSD decoder (29-35× GPU speedup)
         - 'single_error_lut': Single-error look-up table (baseline)
 
     Parameters:
         stim_circuit: A Stim circuit with detector/observable annotations
-        decoder_type: Name of the CUDA-QX decoder to use
+        decoder_type: Name of the CUDA-QX decoder to use (default chosen by GPU availability)
         **decoder_opts: Additional options passed to qec.get_decoder()
     """
 
-    def __init__(self, stim_circuit, decoder_type='nv_qldpc_decoder',
+    def __init__(self, stim_circuit, decoder_type=None,
                  **decoder_opts):
+        if decoder_type is None:
+            decoder_type = DEFAULT_DECODER
         check_cudaqx()
 
         self.stim_circuit = stim_circuit
