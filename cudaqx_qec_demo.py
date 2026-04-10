@@ -33,8 +33,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import maestro
-import maestro_bridge
-from maestro_bridge import deltakit_to_maestro, counts_to_bitarray, apply_measurement_noise
+import maestro_deltakit_bridge as maestro_bridge
+from maestro_deltakit_bridge import deltakit_to_maestro, counts_to_bitarray, apply_measurement_noise
 from deltakit.circuit.gates import PauliBasis
 from deltakit.explorer.codes import RotatedPlanarCode, css_code_memory_circuit
 from deltakit.explorer.qpu import QPU, SI1000Noise
