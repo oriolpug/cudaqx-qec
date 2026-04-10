@@ -33,8 +33,9 @@ import numpy as np
 try:
     import cudaq_qec as qec
     CUDAQX_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     CUDAQX_AVAILABLE = False
+    print(f"Error importing CUDA QX Error Correction: {e}")
 
 def check_cudaqx():
     """Check if CUDA-QX is available and raise informative error if not."""
