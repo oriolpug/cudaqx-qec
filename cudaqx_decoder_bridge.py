@@ -35,8 +35,6 @@ try:
     CUDAQX_AVAILABLE = True
 except ImportError:
     CUDAQX_AVAILABLE = False
-    print("Cuda QX decoder not available.")
-
 
 def check_cudaqx():
     """Check if CUDA-QX is available and raise informative error if not."""
