@@ -1,0 +1,24 @@
+[project]
+name = "cudaqx-qec"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "uri",email = "oriol@qoroquantum.net"}
+]
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "numpy (>=2.4.4,<3.0.0)",
+    "matplotlib (>=3.10.8,<4.0.0)",
+    "deltakit (>=0.8.0,<0.9.0)",
+    "qoro-maestro (>=0.2.8,<0.3.0)",
+    "cudaq-qec (>=0.5.0.post1,<0.6.0)",
+    "cudaq (>=0.14.0,<0.15.0)",
+    "cudaq-qec-cu12 (>=0.5.0.post1,<0.6.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+package-mode = false
