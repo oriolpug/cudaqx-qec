@@ -17,13 +17,14 @@ Three-way comparison:
     3. Maestro (Coh.) → CUDA-QX GPU        [green] GPU decoder on GPU syndromes
 
 Usage:
-    python cudaqx_qec_demo.py
+    python cudaqx_qec_demo.py [--d D] [--chi CHI]
 
 Requires:
     pip install cudaq cudaq-qec   (Linux x86_64 + CUDA 12+)
     pip install maestro deltakit pymatching stim
 """
 
+import argparse
 import time
 import math
 import os
@@ -45,12 +46,17 @@ from deltakit.explorer.analysis import calculate_lep_and_lep_stddev
 from cudaqx_decoder_bridge import CUDAQXDecoder, PyMatchingBaseline, CUDAQX_AVAILABLE, DEFAULT_DECODER, GPU_AVAILABLE
 
 # ── Parameters ──
-d = 3                                     # Code distance
+parser = argparse.ArgumentParser(description="GPU-Everywhere QEC Pipeline Demo")
+parser.add_argument("--d", type=int, default=3, help="Code distance (default: 3)")
+parser.add_argument("--chi", type=int, default=32, help="MPS bond dimension (default: 32)")
+args = parser.parse_args()
+
+d = args.d                                # Code distance
 SCALE = 0.5                               # Coherent noise scale factor
 noise_strengths = [0.002, 0.005, 0.01, 0.02, 0.04]
 stim_shots = 10_000                        # Stim baseline shots
 mps_shots = 500                            # Maestro MPS shots
-chi = 32                                   # Bond dimension
+chi = args.chi                             # Bond dimension
 DECODER_TYPE = DEFAULT_DECODER              # nv-qldpc-decoder (GPU) or single_error_lut (CPU)
 
 print("=" * 70)
