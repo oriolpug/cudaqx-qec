@@ -59,7 +59,7 @@ d = args.d                                # Code distance
 SCALE = 0.5                               # Coherent noise scale factor
 noise_strengths = [0.002, 0.005, 0.01, 0.02, 0.04]
 stim_shots = 10_000                        # Stim baseline shots
-mps_shots = 10000                            # Maestro MPS shots
+mps_shots = 500                            # Maestro MPS shots
 chi = args.chi                             # Bond dimension
 DECODER_TYPE = DEFAULT_DECODER              # nv-qldpc-decoder (GPU) or single_error_lut (CPU)
 
