@@ -17,7 +17,7 @@ Three-way comparison:
     3. Maestro (Coh.) → CUDA-QX GPU        [green] GPU decoder on GPU syndromes
 
 Usage:
-    python cudaqx_qec_demo.py [--d D] [--chi CHI] [--gpu]
+    python cudaqx_qec_demo.py [--d D] [--chi CHI] [--gpu] [--compare]
 
 Requires:
     pip install cudaq cudaq-qec   (Linux x86_64 + CUDA 12+)
@@ -51,6 +51,7 @@ parser = argparse.ArgumentParser(description="GPU-Everywhere QEC Pipeline Demo")
 parser.add_argument("--d", type=int, default=3, help="Code distance (default: 3)")
 parser.add_argument("--chi", type=int, default=32, help="MPS bond dimension (default: 32)")
 parser.add_argument("--gpu", action="store_true", help="Run on GPU if available")
+parser.add_argument("--compare", action="store_true", help="Compare CPU vs GPU for simulation and decoding")
 args = parser.parse_args()
 
 GPU_USED = True if GPU_AVAILABLE and '--gpu' in sys.argv else False
@@ -85,6 +86,135 @@ def build_coherent_circuit(noisy, stim_circ):
     finally:
         maestro_bridge.math.sqrt = _orig
     return result
+
+# ── Compare mode ──
+if args.compare:
+    if not GPU_AVAILABLE:
+        print("ERROR: --compare requires an NVIDIA GPU but none was detected.")
+        sys.exit(1)
+
+    print(f"\n  Mode: COMPARE (CPU vs GPU)")
+    print(f"  Running each noise strength with both simulators and decoders\n")
+
+    cpu_sim_times, gpu_sim_times = [], []
+    cmp_pm_decode_times, cmp_cqx_decode_times = [], []
+
+    for idx, p in enumerate(noise_strengths):
+        print(f"[{idx+1}/{len(noise_strengths)}] p={p}", flush=True)
+
+        circuit = css_code_memory_circuit(code, num_rounds=d, logical_basis=PauliBasis.Z)
+        qpu = QPU(circuit.qubits, noise_model=SI1000Noise(p=p))
+        noisy = qpu.compile_and_add_noise_to_circuit(circuit)
+        pm_decoder, stim_circ = PyMatchingDecoder.construct_decoder_and_stim_circuit(noisy)
+
+        # Build coherent circuit once (reused for both simulators)
+        mqc_c, _, nmc, flip_probs_c = build_coherent_circuit(noisy, stim_circ)
+
+        # ─── Maestro MPS: CPU ───
+        t0 = time.time()
+        rc_cpu = mqc_c.execute(
+            shots=mps_shots,
+            simulator_type=maestro.SimulatorType.QCSim,
+            simulation_type=maestro.SimulationType.MatrixProductState,
+            max_bond_dimension=chi,
+        )
+        cpu_t = time.time() - t0
+        cpu_sim_times.append(cpu_t)
+        print(f"  Maestro CPU:  {cpu_t:.2f}s", flush=True)
+
+        # ─── Maestro MPS: GPU ───
+        t0 = time.time()
+        rc_gpu = mqc_c.execute(
+            shots=mps_shots,
+            simulator_type=maestro.SimulatorType.Gpu,
+            simulation_type=maestro.SimulationType.MatrixProductState,
+            max_bond_dimension=chi,
+        )
+        gpu_t = time.time() - t0
+        gpu_sim_times.append(gpu_t)
+        print(f"  Maestro GPU:  {gpu_t:.2f}s  ({cpu_t/gpu_t:.1f}x speedup)", flush=True)
+
+        # Use GPU syndromes for decoding comparison
+        raw_coherent = counts_to_bitarray(rc_gpu['counts'], nmc)
+        raw_coherent = apply_measurement_noise(raw_coherent, flip_probs_c)
+
+        # ─── Decode: PyMatching (CPU) ───
+        pm_wrapper = PyMatchingBaseline(stim_circ, pm_decoder)
+        _, _, pm_dt = pm_wrapper.decode_raw_measurements(raw_coherent)
+        cmp_pm_decode_times.append(pm_dt)
+        print(f"  PyMatching (CPU):   {pm_dt*1000:.1f}ms", flush=True)
+
+        # ─── Decode: CUDA-QX (GPU) ───
+        if CUDAQX_AVAILABLE:
+            try:
+                cqx_decoder = CUDAQXDecoder(stim_circ, decoder_type="nv-qldpc-decoder")
+                _, _, cqx_dt = cqx_decoder.decode_raw_measurements(raw_coherent)
+                cmp_cqx_decode_times.append(cqx_dt)
+                speedup = pm_dt / cqx_dt if cqx_dt > 0 else float('inf')
+                print(f"  CUDA-QX (GPU):      {cqx_dt*1000:.1f}ms  ({speedup:.1f}x speedup)", flush=True)
+            except Exception as e:
+                print(f"  CUDA-QX error: {e}", flush=True)
+                cmp_cqx_decode_times.append(np.nan)
+        else:
+            print(f"  CUDA-QX: not available", flush=True)
+            cmp_cqx_decode_times.append(np.nan)
+
+    # ── Compare Plot ──
+    print("\nGenerating comparison plot...", flush=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+    fig.patch.set_facecolor('white')
+    x = np.arange(len(noise_strengths))
+    width = 0.35
+
+    # Left: Maestro simulation time (CPU vs GPU)
+    ax1.set_facecolor('#fafafa')
+    ax1.bar(x - width/2, cpu_sim_times, width, color='#dc2626', alpha=0.8,
+            label='Maestro CPU (QCSim)', edgecolor='white', linewidth=0.5)
+    ax1.bar(x + width/2, gpu_sim_times, width, color='#16a34a', alpha=0.8,
+            label='Maestro GPU (cuQuantum)', edgecolor='white', linewidth=0.5)
+    for i in x:
+        speedup = cpu_sim_times[i] / gpu_sim_times[i] if gpu_sim_times[i] > 0 else 0
+        ax1.text(i + width/2, gpu_sim_times[i], f'{speedup:.1f}x',
+                 ha='center', va='bottom', fontsize=9, fontweight='bold', color='#16a34a')
+    ax1.set_xlabel('Physical Error Rate (p)', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Simulation Time (s)', fontsize=13, fontweight='bold')
+    ax1.set_title(f'd={d} Rotated Surface Code, χ={chi}, {mps_shots} shots\n'
+                  'MPS Simulation: CPU vs GPU',
+                  fontsize=14, fontweight='bold', pad=15)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([f'{p:.3f}' for p in noise_strengths])
+    ax1.legend(fontsize=10, framealpha=0.9)
+    ax1.grid(True, alpha=0.3, linestyle='--', axis='y')
+
+    # Right: Decode time (PyMatching CPU vs CUDA-QX GPU)
+    ax2.set_facecolor('#fafafa')
+    pm_ms = [t * 1000 for t in cmp_pm_decode_times]
+    cqx_ms = [t * 1000 if not np.isnan(t) else 0 for t in cmp_cqx_decode_times]
+    ax2.bar(x - width/2, pm_ms, width, color='#dc2626', alpha=0.8,
+            label='PyMatching (CPU)', edgecolor='white', linewidth=0.5)
+    if any(t > 0 for t in cqx_ms):
+        ax2.bar(x + width/2, cqx_ms, width, color='#16a34a', alpha=0.8,
+                label='CUDA-QX nv-qldpc (GPU)', edgecolor='white', linewidth=0.5)
+        for i in x:
+            if cqx_ms[i] > 0:
+                speedup = pm_ms[i] / cqx_ms[i]
+                ax2.text(i + width/2, cqx_ms[i], f'{speedup:.1f}x',
+                         ha='center', va='bottom', fontsize=9, fontweight='bold', color='#16a34a')
+    ax2.set_xlabel('Physical Error Rate (p)', fontsize=13, fontweight='bold')
+    ax2.set_ylabel('Decode Time (ms)', fontsize=13, fontweight='bold')
+    ax2.set_title(f'd={d} Rotated Surface Code, {mps_shots} shots\n'
+                  'Decoding: CPU vs GPU',
+                  fontsize=14, fontweight='bold', pad=15)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([f'{p:.3f}' for p in noise_strengths])
+    ax2.legend(fontsize=10, framealpha=0.9)
+    ax2.grid(True, alpha=0.3, linestyle='--', axis='y')
+
+    plt.tight_layout()
+    outpng = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cudaqx_compare.png')
+    plt.savefig(outpng, dpi=150, bbox_inches='tight')
+    print(f"\n✓ Comparison plot: {outpng}", flush=True)
+    sys.exit(0)
 
 # ── Storage ──
 stim_leps, stim_stds = [], []
