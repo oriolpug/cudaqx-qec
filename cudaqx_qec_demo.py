@@ -127,7 +127,7 @@ with open(outfile, "w") as f:
             simulator_type=maestro.SimulatorType.Gpu if GPU_AVAILABLE else maestro.SimulatorType.QCSim,
             simulation_type=maestro.SimulationType.MatrixProductState,
             max_bond_dimension=chi,
-
+        )
         raw_coherent = counts_to_bitarray(rc['counts'], nmc)
         raw_coherent = apply_measurement_noise(raw_coherent, flip_probs_c)
         sim_time = time.time() - t0
