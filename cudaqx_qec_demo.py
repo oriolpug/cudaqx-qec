@@ -17,7 +17,7 @@ Three-way comparison:
     3. Maestro (Coh.) → CUDA-QX GPU        [green] GPU decoder on GPU syndromes
 
 Usage:
-    python cudaqx_qec_demo.py [--d D] [--chi CHI]
+    python cudaqx_qec_demo.py [--d D] [--chi CHI] [--gpu]
 
 Requires:
     pip install cudaq cudaq-qec   (Linux x86_64 + CUDA 12+)
@@ -25,6 +25,7 @@ Requires:
 """
 
 import argparse
+import sys
 import time
 import math
 import os
@@ -49,8 +50,10 @@ from cudaqx_decoder_bridge import CUDAQXDecoder, PyMatchingBaseline, CUDAQX_AVAI
 parser = argparse.ArgumentParser(description="GPU-Everywhere QEC Pipeline Demo")
 parser.add_argument("--d", type=int, default=3, help="Code distance (default: 3)")
 parser.add_argument("--chi", type=int, default=32, help="MPS bond dimension (default: 32)")
+parser.add_argument("--gpu", action="store_true", help="Run on GPU if available")
 args = parser.parse_args()
 
+GPU_USED = True if GPU_AVAILABLE and '--gpu' in sys.argv else False
 d = args.d                                # Code distance
 SCALE = 0.5                               # Coherent noise scale factor
 noise_strengths = [0.002, 0.005, 0.01, 0.02, 0.04]
@@ -67,7 +70,7 @@ print(f"  Noise model:      SI1000 (superconducting)")
 print(f"  Coherent scale:   ε = {SCALE} × 2√p")
 print(f"  MPS bond dim:     χ={chi}")
 print(f"  MPS shots:        {mps_shots}")
-print(f"  NVIDIA GPU:        {GPU_AVAILABLE}")
+print(f"  NVIDIA GPU:        {GPU_AVAILABLE} (used: {GPU_USED})")
 print(f"  CUDA-QX decoder:  {DECODER_TYPE}")
 print(f"  CUDA-QX available: {CUDAQX_AVAILABLE}")
 
@@ -124,7 +127,7 @@ with open(outfile, "w") as f:
         mqc_c, _, nmc, flip_probs_c = build_coherent_circuit(noisy, stim_circ)
         rc = mqc_c.execute(
             shots=mps_shots,
-            simulator_type=maestro.SimulatorType.Gpu if GPU_AVAILABLE else maestro.SimulatorType.QCSim,
+            simulator_type=maestro.SimulatorType.Gpu if GPU_USED else maestro.SimulatorType.QCSim,
             simulation_type=maestro.SimulationType.MatrixProductState,
             max_bond_dimension=chi,
         )
@@ -150,7 +153,7 @@ with open(outfile, "w") as f:
                 cudaqx_coh_stds.append(cqx_std)
                 cudaqx_decode_times.append(cqx_dt)
                 speedup = pm_dt / cqx_dt if cqx_dt > 0 else float('inf')
-                cqx_label = "GPU" if GPU_AVAILABLE else "CPU"
+                cqx_label = "GPU" if GPU_USED else "CPU"
                 print(f"  → CUDA-QX ({cqx_label}):   LEP={cqx_lep:.5f}  decode={cqx_dt*1000:.1f}ms  "
                       f"({speedup:.1f}× faster)", flush=True)
             except Exception as e:
@@ -225,7 +228,7 @@ bars1 = ax2.bar(x - width/2, pm_times_ms, width, color='#dc2626', alpha=0.8,
                 label='PyMatching (CPU)', edgecolor='white', linewidth=0.5)
 if any(t > 0 for t in cqx_times_ms):
     bars2 = ax2.bar(x + width/2, cqx_times_ms, width, color='#16a34a', alpha=0.8,
-                    label=f'CUDA-QX ({"GPU" if GPU_AVAILABLE else "CPU"})', edgecolor='white', linewidth=0.5)
+                    label=f'CUDA-QX ({"GPU" if GPU_USED else "CPU"})', edgecolor='white', linewidth=0.5)
 
 ax2.set_xlabel('Physical Error Rate (p)', fontsize=13, fontweight='bold')
 ax2.set_ylabel('Decode Time (ms)', fontsize=13, fontweight='bold')
@@ -247,7 +250,7 @@ print(f"\n✓ Plot: {outpng}", flush=True)
 print(f"\n{'=' * 85}")
 print(f"  GPU-Everywhere QEC Pipeline Results")
 print(f"  Simulation: Maestro MPS (cuQuantum/cuTensorNet) — coherent noise")
-print(f"  Decoding:   CUDA-QX {DECODER_TYPE} ({'GPU' if GPU_AVAILABLE else 'CPU'}) vs PyMatching (CPU)")
+print(f"  Decoding:   CUDA-QX {DECODER_TYPE} ({'GPU' if GPU_USED else 'CPU'}) vs PyMatching (CPU)")
 print(f"{'=' * 85}")
 print(f"  {'p':>6}  {'Stim+PM':>10}  {'MPS+PM':>10}  {'MPS+CQX':>10}  "
       f"{'PM(ms)':>8}  {'CQX(ms)':>8}  {'Speedup':>8}")
@@ -262,6 +265,6 @@ for i, p in enumerate(noise_strengths):
 print(f"{'=' * 85}")
 print(f"\n  Key finding: Coherent noise (simulated on GPU via cuQuantum)")
 print(f"  produces higher logical error rates than Pauli noise.")
-print(f"  CUDA-QX decoders decode the syndromes {'on GPU, ' if GPU_AVAILABLE else ''}faster")
+print(f"  CUDA-QX decoders decode the syndromes {'on GPU, ' if GPU_USED else ''}faster")
 print(f"  than CPU-only PyMatching — enabling end-to-end GPU QEC research.")
 print(f"\n{'=' * 85}")
