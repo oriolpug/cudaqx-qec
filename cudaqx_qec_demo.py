@@ -54,7 +54,7 @@ parser.add_argument("--gpu", action="store_true", help="Run on GPU if available"
 parser.add_argument("--compare", action="store_true", help="Compare CPU vs GPU for simulation and decoding")
 args = parser.parse_args()
 
-GPU_USED = True if GPU_AVAILABLE and '--gpu' in sys.argv else False
+GPU_USED = True if GPU_AVAILABLE and ('--gpu' in sys.argv or '--compare' in sys.argv) else False
 d = args.d                                # Code distance
 SCALE = 0.5                               # Coherent noise scale factor
 noise_strengths = [0.002, 0.005, 0.01, 0.02, 0.04]
